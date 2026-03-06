@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"notediscovery/internal/auth"
@@ -24,9 +21,8 @@ import (
 )
 
 type Server struct {
-	srv      *http.Server
-	port     int
-	handlers *Handlers
+	srv  *http.Server
+	port int
 }
 
 type Params struct {
@@ -45,72 +41,83 @@ type Params struct {
 }
 
 func New(params Params) *Server {
-	h := &Handlers{params: params}
+	core := NewCoreHandler(params)
+	noteHandler := notes.NewHandler(notes.HandlerParams{
+		Config:  params.Config,
+		Service: params.Notes,
+		Plugins: params.Plugins,
+		Share:   params.Share,
+	})
+	themeHandler := themes.NewHandler(params.Themes)
+	localeHandler := locales.NewHandler(params.Locales)
+	pluginHandler := params.Plugins
+	graphHandler := graph.NewHandler(params.Graph)
+	shareHandler := share.NewHandler(params.Share, params.Notes)
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(middleware.StripSlashes)
-	r.Use(h.corsMiddleware)
+	r.Use(core.corsMiddleware)
 
-	r.Get("/health", mango.WrapErrorHandler(h.Health))
-	r.Get("/sw.js", mango.WrapErrorHandler(h.ServiceWorker))
-	r.Get("/login", mango.WrapErrorHandler(h.LoginPage))
-	r.Post("/login", mango.WrapErrorHandler(h.Login))
-	r.Get("/logout", mango.WrapErrorHandler(h.Logout))
+	r.Get("/health", mango.WrapErrorHandler(core.Health))
+	r.Get("/sw.js", mango.WrapErrorHandler(core.ServiceWorker))
+	r.Get("/login", mango.WrapErrorHandler(core.LoginPage))
+	r.Post("/login", mango.WrapErrorHandler(core.Login))
+	r.Get("/logout", mango.WrapErrorHandler(core.Logout))
 
 	// Public routes needed for login page/app bootstrap.
-	r.Get("/api/locales", mango.WrapErrorHandler(h.ListLocales))
-	r.Get("/api/locales/{code}", mango.WrapErrorHandler(h.GetLocale))
-	r.Get("/api/themes/{theme_id}", mango.WrapErrorHandler(h.GetTheme))
-	r.Get("/share/{token}", mango.WrapErrorHandler(h.ViewSharedNote))
+	r.Get("/api/locales", mango.WrapErrorHandler(localeHandler.List))
+	r.Get("/api/locales/{code}", mango.WrapErrorHandler(localeHandler.Get))
+	r.Get("/api/themes/{theme_id}", mango.WrapErrorHandler(themeHandler.Get))
+	r.Get("/share/{token}", mango.WrapErrorHandler(shareHandler.View))
 
 	r.Mount("/static", http.StripPrefix("/static", http.FileServer(http.Dir(params.StaticDir))))
 
 	r.Route("/api", func(api chi.Router) {
-		api.Use(h.authMiddleware)
-		api.Get("/config", mango.WrapErrorHandler(h.GetConfig))
-		api.Get("/themes", mango.WrapErrorHandler(h.ListThemes))
-		api.Get("/notes", mango.WrapErrorHandler(h.ListNotes))
-		api.Post("/notes/move", mango.WrapErrorHandler(h.MoveNote))
-		api.Get("/notes/*", mango.WrapErrorHandler(h.GetNote))
-		api.Post("/notes/*", mango.WrapErrorHandler(h.UpsertNote))
-		api.Delete("/notes/*", mango.WrapErrorHandler(h.DeleteNote))
+		api.Use(core.authMiddleware)
+		api.Get("/config", mango.WrapErrorHandler(core.GetConfig))
+		api.Get("/themes", mango.WrapErrorHandler(themeHandler.List))
 
-		api.Post("/folders", mango.WrapErrorHandler(h.CreateFolder))
-		api.Post("/folders/move", mango.WrapErrorHandler(h.MoveFolder))
-		api.Post("/folders/rename", mango.WrapErrorHandler(h.RenameFolder))
-		api.Delete("/folders/*", mango.WrapErrorHandler(h.DeleteFolder))
+		api.Get("/notes", mango.WrapErrorHandler(noteHandler.List))
+		api.Post("/notes/move", mango.WrapErrorHandler(noteHandler.Move))
+		api.Get("/notes/*", mango.WrapErrorHandler(noteHandler.Get))
+		api.Post("/notes/*", mango.WrapErrorHandler(noteHandler.Upsert))
+		api.Delete("/notes/*", mango.WrapErrorHandler(noteHandler.Delete))
 
-		api.Get("/media/*", mango.WrapErrorHandler(h.GetMedia))
-		api.Post("/upload-media", mango.WrapErrorHandler(h.UploadMedia))
-		api.Post("/media/move", mango.WrapErrorHandler(h.MoveMedia))
+		api.Post("/folders", mango.WrapErrorHandler(noteHandler.CreateFolder))
+		api.Post("/folders/move", mango.WrapErrorHandler(noteHandler.MoveFolder))
+		api.Post("/folders/rename", mango.WrapErrorHandler(noteHandler.RenameFolder))
+		api.Delete("/folders/*", mango.WrapErrorHandler(noteHandler.DeleteFolder))
 
-		api.Get("/search", mango.WrapErrorHandler(h.Search))
-		api.Get("/graph", mango.WrapErrorHandler(h.Graph))
+		api.Get("/media/*", mango.WrapErrorHandler(noteHandler.GetMedia))
+		api.Post("/upload-media", mango.WrapErrorHandler(noteHandler.UploadMedia))
+		api.Post("/media/move", mango.WrapErrorHandler(noteHandler.MoveMedia))
 
-		api.Get("/tags", mango.WrapErrorHandler(h.ListTags))
-		api.Get("/tags/{tag_name}", mango.WrapErrorHandler(h.NotesByTag))
+		api.Get("/search", mango.WrapErrorHandler(noteHandler.Search))
+		api.Get("/graph", mango.WrapErrorHandler(graphHandler.Get))
 
-		api.Get("/templates", mango.WrapErrorHandler(h.ListTemplates))
-		api.Get("/templates/{template_name}", mango.WrapErrorHandler(h.GetTemplate))
-		api.Post("/templates/create-note", mango.WrapErrorHandler(h.CreateFromTemplate))
+		api.Get("/tags", mango.WrapErrorHandler(noteHandler.ListTags))
+		api.Get("/tags/{tag_name}", mango.WrapErrorHandler(noteHandler.NotesByTag))
 
-		api.Get("/plugins", mango.WrapErrorHandler(h.ListPlugins))
-		api.Get("/plugins/note_stats/calculate", mango.WrapErrorHandler(h.CalculateNoteStats))
-		api.Post("/plugins/{plugin_name}/toggle", mango.WrapErrorHandler(h.TogglePlugin))
+		api.Get("/templates", mango.WrapErrorHandler(noteHandler.ListTemplates))
+		api.Get("/templates/{template_name}", mango.WrapErrorHandler(noteHandler.GetTemplate))
+		api.Post("/templates/create-note", mango.WrapErrorHandler(noteHandler.CreateFromTemplate))
 
-		api.Get("/shared-notes", mango.WrapErrorHandler(h.ListSharedNotes))
-		api.Post("/share/*", mango.WrapErrorHandler(h.CreateShare))
-		api.Get("/share/*", mango.WrapErrorHandler(h.GetShareStatus))
-		api.Delete("/share/*", mango.WrapErrorHandler(h.DeleteShare))
+		pluginHandler.InstallRoutes(api)
+
+		api.Get("/shared-notes", mango.WrapErrorHandler(shareHandler.List))
+		api.Post("/share/*", mango.WrapErrorHandler(shareHandler.Create))
+		api.Get("/share/*", mango.WrapErrorHandler(shareHandler.Status))
+		api.Delete("/share/*", mango.WrapErrorHandler(shareHandler.Delete))
 	})
 
 	r.Group(func(pr chi.Router) {
-		pr.Use(h.authMiddleware)
-		pr.Get("/*", mango.WrapErrorHandler(h.CatchAll))
-		pr.Get("/", mango.WrapErrorHandler(h.CatchAll))
+		pr.Use(core.authMiddleware)
+		pr.Get("/*", mango.WrapErrorHandler(core.CatchAll))
+		pr.Get("/", mango.WrapErrorHandler(core.CatchAll))
 	})
 
 	return &Server{
@@ -120,8 +127,7 @@ func New(params Params) *Server {
 			ReadTimeout:  15 * time.Second,
 			WriteTimeout: 30 * time.Second,
 		},
-		port:     params.Config.Server.Port,
-		handlers: h,
+		port: params.Config.Server.Port,
 	}
 }
 
@@ -133,58 +139,4 @@ func (s *Server) Run() error {
 
 func (s *Server) Close() error {
 	return s.srv.Close()
-}
-
-func (h *Handlers) corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origins := h.params.Config.Server.AllowedOrigins
-		origin := "*"
-		if len(origins) == 1 {
-			origin = origins[0]
-		}
-		if origin == "*" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		} else {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (h *Handlers) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.params.Auth.Enabled() {
-			next.ServeHTTP(w, r)
-			return
-		}
-		cookie, _ := r.Cookie("nd_auth")
-		if cookie == nil || !h.params.Auth.IsAuthenticated(cookie.Value) {
-			if strings.HasPrefix(r.URL.Path, "/api/") {
-				mango.WriteJSONResponse(w, http.StatusUnauthorized, map[string]any{"detail": "Not authenticated"})
-				return
-			}
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func readVersion(versionFile string) string {
-	buf, err := os.ReadFile(versionFile)
-	if err != nil {
-		return "0.0.0"
-	}
-	return strings.TrimSpace(string(buf))
-}
-
-func defaultStaticDir() string {
-	return filepath.Clean("frontend")
 }

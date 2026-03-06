@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/tagus/mango"
 )
 
 const (
@@ -56,6 +59,10 @@ type SearchHook interface {
 
 type AppStartupHook interface {
 	OnAppStartup() error
+}
+
+type RouteInstaller interface {
+	InstallRoutes(r chi.Router, svc *Service)
 }
 
 type runtimePlugin struct {
@@ -134,6 +141,20 @@ func (s *Service) AnalyzeContent(name string, content string) (any, bool, bool) 
 		return nil, false, true
 	}
 	return payload, true, true
+}
+
+func (s *Service) InstallRoutes(r chi.Router) {
+	h := NewHandler(s)
+	r.Get("/plugins", mango.WrapErrorHandler(h.List))
+	r.Post("/plugins/{plugin_name}/toggle", mango.WrapErrorHandler(h.Toggle))
+
+	for _, runtime := range s.plugins {
+		installer, ok := runtime.impl.(RouteInstaller)
+		if !ok {
+			continue
+		}
+		installer.InstallRoutes(r, s)
+	}
 }
 
 // RunHook executes lifecycle hooks using a Python-like payload map contract.
