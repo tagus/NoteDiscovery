@@ -140,7 +140,7 @@ func (h *Handlers) ListNotes(w http.ResponseWriter, _ *http.Request) error {
 }
 
 func (h *Handlers) GetNote(w http.ResponseWriter, r *http.Request) error {
-	notePath := chi.URLParam(r, "note_path")
+	notePath := pathParam(r, "note_path")
 	content, err := h.params.Notes.ReadNote(notePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -165,7 +165,7 @@ func (h *Handlers) GetNote(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handlers) UpsertNote(w http.ResponseWriter, r *http.Request) error {
-	notePath := chi.URLParam(r, "note_path")
+	notePath := pathParam(r, "note_path")
 	var body struct {
 		Content string `json:"content"`
 	}
@@ -206,7 +206,7 @@ func (h *Handlers) UpsertNote(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handlers) DeleteNote(w http.ResponseWriter, r *http.Request) error {
-	notePath := chi.URLParam(r, "note_path")
+	notePath := pathParam(r, "note_path")
 	if err := h.params.Notes.DeleteNote(notePath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return mango.NotFoundError("note not found")
@@ -269,7 +269,7 @@ func (h *Handlers) RenameFolder(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handlers) DeleteFolder(w http.ResponseWriter, r *http.Request) error {
-	folderPath := chi.URLParam(r, "folder_path")
+	folderPath := pathParam(r, "folder_path")
 	if err := h.params.Notes.DeleteFolder(folderPath); err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func (h *Handlers) DeleteFolder(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handlers) GetMedia(w http.ResponseWriter, r *http.Request) error {
-	mediaPath := chi.URLParam(r, "media_path")
+	mediaPath := pathParam(r, "media_path")
 	if err := h.params.Notes.ServeMedia(w, r, mediaPath); err != nil {
 		return mango.BadRequestErrorWithCause("failed to get media", err)
 	}
@@ -455,7 +455,7 @@ func (h *Handlers) TogglePlugin(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handlers) CreateShare(w http.ResponseWriter, r *http.Request) error {
-	notePath := chi.URLParam(r, "note_path")
+	notePath := pathParam(r, "note_path")
 	if !strings.HasSuffix(strings.ToLower(notePath), ".md") {
 		notePath += ".md"
 	}
@@ -481,7 +481,7 @@ func (h *Handlers) CreateShare(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handlers) GetShareStatus(w http.ResponseWriter, r *http.Request) error {
-	notePath := chi.URLParam(r, "note_path")
+	notePath := pathParam(r, "note_path")
 	if !strings.HasSuffix(strings.ToLower(notePath), ".md") {
 		notePath += ".md"
 	}
@@ -507,7 +507,7 @@ func (h *Handlers) ListSharedNotes(w http.ResponseWriter, _ *http.Request) error
 }
 
 func (h *Handlers) DeleteShare(w http.ResponseWriter, r *http.Request) error {
-	notePath := chi.URLParam(r, "note_path")
+	notePath := pathParam(r, "note_path")
 	if !strings.HasSuffix(strings.ToLower(notePath), ".md") {
 		notePath += ".md"
 	}
@@ -559,4 +559,12 @@ func ternary[T any](cond bool, a T, b T) T {
 		return a
 	}
 	return b
+}
+
+func pathParam(r *http.Request, named string) string {
+	value := strings.TrimPrefix(chi.URLParam(r, named), "/")
+	if value != "" {
+		return value
+	}
+	return strings.TrimPrefix(chi.URLParam(r, "*"), "/")
 }

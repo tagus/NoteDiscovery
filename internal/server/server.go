@@ -73,17 +73,17 @@ func New(params Params) *Server {
 		api.Get("/config", mango.WrapErrorHandler(h.GetConfig))
 		api.Get("/themes", mango.WrapErrorHandler(h.ListThemes))
 		api.Get("/notes", mango.WrapErrorHandler(h.ListNotes))
-		api.Get("/notes/{note_path}", mango.WrapErrorHandler(h.GetNote))
-		api.Post("/notes/{note_path}", mango.WrapErrorHandler(h.UpsertNote))
-		api.Delete("/notes/{note_path}", mango.WrapErrorHandler(h.DeleteNote))
 		api.Post("/notes/move", mango.WrapErrorHandler(h.MoveNote))
+		api.Get("/notes/*", mango.WrapErrorHandler(h.GetNote))
+		api.Post("/notes/*", mango.WrapErrorHandler(h.UpsertNote))
+		api.Delete("/notes/*", mango.WrapErrorHandler(h.DeleteNote))
 
 		api.Post("/folders", mango.WrapErrorHandler(h.CreateFolder))
 		api.Post("/folders/move", mango.WrapErrorHandler(h.MoveFolder))
 		api.Post("/folders/rename", mango.WrapErrorHandler(h.RenameFolder))
-		api.Delete("/folders/{folder_path}", mango.WrapErrorHandler(h.DeleteFolder))
+		api.Delete("/folders/*", mango.WrapErrorHandler(h.DeleteFolder))
 
-		api.Get("/media/{media_path}", mango.WrapErrorHandler(h.GetMedia))
+		api.Get("/media/*", mango.WrapErrorHandler(h.GetMedia))
 		api.Post("/upload-media", mango.WrapErrorHandler(h.UploadMedia))
 		api.Post("/media/move", mango.WrapErrorHandler(h.MoveMedia))
 
@@ -101,10 +101,10 @@ func New(params Params) *Server {
 		api.Get("/plugins/note_stats/calculate", mango.WrapErrorHandler(h.CalculateNoteStats))
 		api.Post("/plugins/{plugin_name}/toggle", mango.WrapErrorHandler(h.TogglePlugin))
 
-		api.Post("/share/{note_path}", mango.WrapErrorHandler(h.CreateShare))
-		api.Get("/share/{note_path}", mango.WrapErrorHandler(h.GetShareStatus))
-		api.Delete("/share/{note_path}", mango.WrapErrorHandler(h.DeleteShare))
 		api.Get("/shared-notes", mango.WrapErrorHandler(h.ListSharedNotes))
+		api.Post("/share/*", mango.WrapErrorHandler(h.CreateShare))
+		api.Get("/share/*", mango.WrapErrorHandler(h.GetShareStatus))
+		api.Delete("/share/*", mango.WrapErrorHandler(h.DeleteShare))
 	})
 
 	r.Group(func(pr chi.Router) {
