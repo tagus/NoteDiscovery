@@ -70,6 +70,7 @@ func main() {
 	themesSvc := themes.NewService("themes")
 	localesSvc := locales.NewService("locales")
 	pluginsSvc := plugins.NewService(cfg.Storage.PluginsDir)
+	pluginsSvc.RunHook(plugins.HookOnAppStartup, nil)
 	graphSvc := graph.NewService(notesSvc)
 	shareSvc := share.NewService(notesSvc, "themes")
 	authSvc := auth.NewService(cfg.Authentication.SecretKey, cfg.Authentication.PasswordHash, cfg.Authentication.Enabled, cfg.Authentication.SessionMaxAge)

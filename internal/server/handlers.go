@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"notediscovery/internal/plugins"
 	"notediscovery/internal/share"
 
 	"github.com/go-chi/chi/v5"
@@ -147,6 +148,14 @@ func (h *Handlers) GetNote(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
+	loadPayload := h.params.Plugins.RunHook(plugins.HookOnNoteLoad, map[string]any{
+		"note_path": notePath,
+		"content":   content,
+	})
+	if transformed, ok := loadPayload["content"].(string); ok {
+		content = transformed
+	}
+
 	metadata, err := h.params.Notes.StatNote(notePath)
 	if err != nil {
 		return err
@@ -167,11 +176,32 @@ func (h *Handlers) UpsertNote(w http.ResponseWriter, r *http.Request) error {
 			return mango.BadRequestErrorWithCause("invalid payload", err)
 		}
 	}
-	_, err := h.params.Notes.WriteNote(notePath, body.Content)
+	_, existingErr := h.params.Notes.ReadNote(notePath)
+	isNewNote := existingErr != nil
+
+	content := body.Content
+	if isNewNote {
+		createPayload := h.params.Plugins.RunHook(plugins.HookOnNoteCreate, map[string]any{
+			"note_path":       notePath,
+			"initial_content": content,
+		})
+		if transformed, ok := createPayload["initial_content"].(string); ok {
+			content = transformed
+		}
+	}
+	savePayload := h.params.Plugins.RunHook(plugins.HookOnNoteSave, map[string]any{
+		"note_path": notePath,
+		"content":   content,
+	})
+	if transformed, ok := savePayload["content"].(string); ok {
+		content = transformed
+	}
+
+	_, err := h.params.Notes.WriteNote(notePath, content)
 	if err != nil {
 		return err
 	}
-	mango.WriteJSONResponse(w, http.StatusOK, map[string]any{"success": true, "path": notePath, "message": "Note saved successfully", "content": body.Content})
+	mango.WriteJSONResponse(w, http.StatusOK, map[string]any{"success": true, "path": notePath, "message": "Note saved successfully", "content": content})
 	return nil
 }
 
@@ -184,6 +214,7 @@ func (h *Handlers) DeleteNote(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	_, _ = h.params.Share.RevokeByPath(notePath)
+	h.params.Plugins.RunHook(plugins.HookOnNoteDelete, map[string]any{"note_path": notePath})
 	mango.WriteJSONResponse(w, http.StatusOK, map[string]any{"success": true, "message": "Note deleted successfully"})
 	return nil
 }
@@ -296,6 +327,10 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	h.params.Plugins.RunHook(plugins.HookOnSearch, map[string]any{
+		"query":   q,
+		"results": results,
+	})
 	mango.WriteJSONResponse(w, http.StatusOK, map[string]any{"results": results, "query": q})
 	return nil
 }
@@ -360,6 +395,21 @@ func (h *Handlers) CreateFromTemplate(w http.ResponseWriter, r *http.Request) er
 		return mango.NotFoundError("template not found")
 	}
 	final := h.params.Notes.ApplyTemplatePlaceholders(content, body.NotePath)
+	createPayload := h.params.Plugins.RunHook(plugins.HookOnNoteCreate, map[string]any{
+		"note_path":       body.NotePath,
+		"initial_content": final,
+	})
+	if transformed, ok := createPayload["initial_content"].(string); ok {
+		final = transformed
+	}
+	savePayload := h.params.Plugins.RunHook(plugins.HookOnNoteSave, map[string]any{
+		"note_path": body.NotePath,
+		"content":   final,
+	})
+	if transformed, ok := savePayload["content"].(string); ok {
+		final = transformed
+	}
+
 	if _, err := h.params.Notes.WriteNote(body.NotePath, final); err != nil {
 		return err
 	}
@@ -377,8 +427,11 @@ func (h *Handlers) CalculateNoteStats(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return mango.BadRequestErrorWithCause("invalid query", err)
 	}
-	stats := h.params.Plugins.Calculate(content)
-	if stats == nil {
+	stats, enabled, found := h.params.Plugins.AnalyzeContent("note_stats", content)
+	if !found {
+		return mango.NotFoundError("plugin \"note_stats\" not found")
+	}
+	if !enabled {
 		mango.WriteJSONResponse(w, http.StatusOK, map[string]any{"enabled": false, "stats": nil})
 		return nil
 	}
@@ -394,7 +447,9 @@ func (h *Handlers) TogglePlugin(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return mango.BadRequestErrorWithCause("invalid payload", err)
 	}
-	h.params.Plugins.Toggle(name, body.Enabled)
+	if ok := h.params.Plugins.Toggle(name, body.Enabled); !ok {
+		return mango.NotFoundError("plugin not found")
+	}
 	mango.WriteJSONResponse(w, http.StatusOK, map[string]any{"success": true, "plugin": name, "enabled": body.Enabled})
 	return nil
 }
