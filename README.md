@@ -136,45 +136,14 @@ For development or if you prefer running directly:
 git clone https://github.com/gamosoft/notediscovery.git
 cd notediscovery
 
-# Install dependencies
-pip install -r requirements.txt
-
 # Run the application
-python run.py
+go run ./cmd/notediscovery -config config.yaml
 
 # Access at http://localhost:8000
 ```
 
 **Requirements:**
-- Python 3.8 or higher
-- pip (Python package manager)
-
-#### Using Virtual Environments (Recommended for Arch/Fedora/Ubuntu 23.04+)
-
-Modern Linux distributions enforce [PEP 668](https://peps.python.org/pep-0668/), which prevents system-wide pip installs. Use a virtual environment instead:
-
-```bash
-# Clone the repository
-git clone https://github.com/gamosoft/notediscovery.git
-cd notediscovery
-
-# Create a virtual environment
-python -m venv venv
-
-# Activate it (choose your shell):
-source venv/bin/activate        # Bash/Zsh (most Linux distros)
-source venv/bin/activate.fish   # Fish (CachyOS, etc.)
-source venv/bin/activate.csh    # Csh/Tcsh
-.\venv\Scripts\activate         # Windows PowerShell
-
-# Install dependencies and run
-pip install -r requirements.txt
-python run.py
-```
-
-> ⚠️ **Warning**
->
-> *You'll need to activate the virtual environment (source venv/bin/activate) each time you open a new terminal before running the app*
+- Go 1.25+
 
 ### Advanced Docker Setup
 
@@ -267,7 +236,6 @@ NoteDiscovery is designed for **self-hosted, private use**. Please keep these se
 - ⚠️ **ENABLE AUTHENTICATION AND CHANGE THE DEFAULT PASSWORD** if exposing to a network!
 - See **[AUTHENTICATION.md](documentation/AUTHENTICATION.md)** for complete setup instructions
 - To disable auth, set `authentication.enabled: false` in `config.yaml`
-- Change password with Docker: `docker-compose exec notediscovery python generate_password.py`
 - Perfect for single-user or small team deployments
 - For multi-user setups, consider a reverse proxy with OAuth/SSO
 

@@ -8,7 +8,7 @@ NoteDiscovery supports environment variables to override configuration settings,
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `PORT` | integer | `8000` | HTTP port for the application (Docker, run.py) |
+| `PORT` | integer | `8000` | HTTP port for the application (Docker, Go backend) |
 
 > **Note**: Advanced server settings (CORS origins, debug mode) are configured via `config.yaml` only, not via environment variables. See [config.yaml](#advanced-server-configuration) for details.
 
@@ -112,4 +112,3 @@ When `debug: false` (recommended):
 ---
 
 **Pro Tip:** Use environment variables for **deployment-specific** settings, and `config.yaml` for **application defaults**. This keeps your configuration flexible and maintainable! 🎯
-

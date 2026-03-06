@@ -101,7 +101,7 @@ Some features (like Mermaid diagrams, Chart.js) need to know if the background i
 
 #### 4. (Optional) Add a custom emoji icon
 
-Edit `backend/themes.py` and add your theme to the `theme_icons` dictionary:
+Edit `internal/themes/service.go` and add your theme to the `icons` dictionary:
 
 ```python
 theme_icons = {
@@ -120,7 +120,7 @@ docker-compose restart
 
 # If running locally:
 # Stop the server (Ctrl+C) and run again:
-python -m notediscovery.backend.main
+go run ./cmd/notediscovery -config config.yaml
 ```
 
 Your new theme will appear in the dropdown as **"🚀 My Awesome Theme"**!
@@ -154,4 +154,3 @@ All these CSS variables **must** be defined for your theme to work properly:
 ---
 
 🎨 **Tip:** Use browser DevTools to experiment with colors in real-time before creating your theme!
-

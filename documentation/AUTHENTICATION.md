@@ -79,13 +79,9 @@ authentication:
 
 For users who prefer to hash passwords themselves.
 
-**Generate a hash:**
+**Generate a bcrypt hash** (example):
 ```bash
-# Docker
-docker exec -it notediscovery python generate_password.py
-
-# Local
-python generate_password.py
+htpasswd -bnBC 12 "" "your_secure_password" | tr -d ':\n' | sed 's/$2y/$2b/'
 ```
 
 **Then configure:**
@@ -108,7 +104,7 @@ docker-compose restart
 docker restart notediscovery
 
 # Local
-python run.py
+go run ./cmd/notediscovery -config config.yaml
 ```
 
 Navigate to `http://localhost:8000` — you'll be redirected to the login page.
