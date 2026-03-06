@@ -1,50 +1,38 @@
-# Stage 1: Install dependencies
-FROM python:3.11-slim AS builder
+# Stage 1: build Go backend
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
+COPY VERSION ./VERSION
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/notediscovery ./cmd/notediscovery
+
+# Stage 2: minimal runtime
+FROM alpine:3.22
 
 WORKDIR /app
 
-# Install Python packages
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt && \
-    # Clean up unnecessary files to reduce image size
-    find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
-    find /install -type f -name "*.pyc" -delete && \
-    find /install -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
-    find /install -type d -name "*.dist-info" -exec rm -rf {}/RECORD {} + 2>/dev/null || true
+RUN apk add --no-cache ca-certificates
 
-# Stage 2: Final minimal image
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Copy only installed packages (no pip cache, no build artifacts)
-COPY --from=builder /install /usr/local
-
-# Copy application files
-COPY backend ./backend
+COPY --from=builder /out/notediscovery /app/notediscovery
 COPY frontend ./frontend
-COPY config.yaml .
-COPY VERSION .
+COPY config.yaml ./config.yaml
+COPY VERSION ./VERSION
 COPY plugins ./plugins
 COPY themes ./themes
 COPY locales ./locales
-COPY generate_password.py .
 
-# Create data directory
-RUN mkdir -p data
+RUN mkdir -p /app/data
 
-# Expose port (default, can be overridden)
 EXPOSE 8000
-
-# Set default port (can be overridden via environment variable)
 ENV PORT=8000
 
-# Health check (uses PORT env var)
 HEALTHCHECK --interval=60s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.getenv(\"PORT\", \"8000\")}/health')"
+  CMD wget -qO- "http://localhost:${PORT}/health" >/dev/null || exit 1
 
-# Run the application (shell form to allow environment variable expansion)
-# Use exec to replace shell with uvicorn (receives SIGTERM directly for graceful shutdown)
-CMD exec uvicorn backend.main:app --host 0.0.0.0 --port $PORT --timeout-graceful-shutdown 2
-
+CMD ["/app/notediscovery", "-config", "/app/config.yaml"]
