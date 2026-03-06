@@ -170,7 +170,7 @@ func (p *NoteStatsPlugin) calculateStats(content string) *NoteStats {
 		}
 	}
 	sentences := len(regexp.MustCompile(`[.!?]+(?:\s|$)`).FindAllString(content, -1))
-	listItems := len(regexp.MustCompile(`(?m)^\s*(?:[-*+]|\d+\.)\s+(?!\[)`).FindAllString(content, -1))
+	listItems := countListItems(content)
 	tables := len(regexp.MustCompile(`(?m)^\s*\|(?:\s*:?-+:?\s*\|){1,}\s*$`).FindAllString(content, -1))
 	markdownLinks := len(regexp.MustCompile(`\[([^\]]+)\]\(([^\)]+)\)`).FindAllString(content, -1))
 	markdownInternalLinks := len(regexp.MustCompile(`\[([^\]]+)\]\(([^\)]+\.md)\)`).FindAllString(content, -1))
@@ -223,3 +223,22 @@ func (p *NoteStatsPlugin) calculateStats(content string) *NoteStats {
 var _ Plugin = (*NoteStatsPlugin)(nil)
 var _ ContentAnalyzer = (*NoteStatsPlugin)(nil)
 var _ NoteSaveHook = (*NoteStatsPlugin)(nil)
+
+func countListItems(content string) int {
+	// Go's regexp engine (RE2) does not support lookaheads like (?!\[).
+	// Match list prefixes first, then exclude task items in code.
+	re := regexp.MustCompile(`^\s*(?:[-*+]|\d+\.)\s+(.*)$`)
+	count := 0
+	for _, line := range strings.Split(content, "\n") {
+		matches := re.FindStringSubmatch(line)
+		if len(matches) != 2 {
+			continue
+		}
+		rest := strings.TrimSpace(matches[1])
+		if strings.HasPrefix(rest, "[") {
+			continue
+		}
+		count++
+	}
+	return count
+}

@@ -34,7 +34,7 @@ func (s *Service) Build() (map[string]any, error) {
 	}
 
 	wikiRE := regexp.MustCompile(`\[\[([^\]|]+)(?:\|[^\]]+)?\]\]`)
-	mdRE := regexp.MustCompile(`\[[^\]]+\]\((?!https?://|mailto:|#|data:)([^\)]+)\)`)
+	mdRE := regexp.MustCompile(`\[[^\]]+\]\(([^\)]+)\)`)
 	seen := map[string]struct{}{}
 
 	for _, note := range allNotes {
@@ -54,7 +54,17 @@ func (s *Service) Build() (map[string]any, error) {
 			s.addEdge(note.Path, targetPath, "wikilink", seen, &edges)
 		}
 		for _, match := range mdRE.FindAllStringSubmatch(content, -1) {
-			target := strings.TrimSpace(strings.Split(match[1], "#")[0])
+			rawTarget := strings.TrimSpace(match[1])
+			lowerRaw := strings.ToLower(rawTarget)
+			if strings.HasPrefix(lowerRaw, "http://") ||
+				strings.HasPrefix(lowerRaw, "https://") ||
+				strings.HasPrefix(lowerRaw, "mailto:") ||
+				strings.HasPrefix(lowerRaw, "data:") ||
+				strings.HasPrefix(rawTarget, "#") {
+				continue
+			}
+
+			target := strings.TrimSpace(strings.Split(rawTarget, "#")[0])
 			if target == "" {
 				continue
 			}
